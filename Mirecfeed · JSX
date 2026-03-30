@@ -1,0 +1,711 @@
+import { useState, useEffect, useCallback, useRef } from "react";
+
+// ============================================================
+// MIREC — FEED PRINCIPAL
+// Supabase Realtime + Réactions Amen/Feu/Coeur + Prières
+//
+// Dépendances :
+//   npm install @supabase/supabase-js
+//   npx expo install expo-image-picker expo-av
+//
+// Remplacer le mock supabase par :
+//   import { supabase } from '../lib/supabase'
+//   import { useAuthStore } from '../stores/authStore'
+// ============================================================
+
+// ---- MOCK SUPABASE (remplacer par ton vrai client) ----------
+let _mockPosts = [
+  {
+    id: "1", created_at: new Date(Date.now() - 7200000).toISOString(),
+    content: "Le culte de dimanche sera en plein air. Amenez vos chaises et votre joie !",
+    type: "announcement", is_official: true, is_pinned: true,
+    media_url: null,
+    profiles: { full_name: "Pasteur Kokou", role: "pasteur", avatar_initials: "PK", avatar_color: "#1A4B9B" },
+    reactions: { amen: 47, feu: 23, coeur: 61 },
+    user_reactions: {},
+    comments_count: 5,
+    comments: [
+      { id: "c1", content: "Gloire à Dieu ! On sera là en famille", profiles: { full_name: "Ama S.", avatar_initials: "AS", avatar_color: "#059669" } },
+      { id: "c2", content: "Amen ! Que Dieu soit loué", profiles: { full_name: "Jonas K.", avatar_initials: "JK", avatar_color: "#D97706" } },
+    ]
+  },
+  {
+    id: "2", created_at: new Date(Date.now() - 18000000).toISOString(),
+    content: "Après 3 mois de chômage, j'ai décroché mon poste aujourd'hui. Dieu est fidèle !",
+    type: "testimony", is_official: false, is_pinned: false,
+    media_url: null,
+    profiles: { full_name: "Ama Sévi", role: "membre", avatar_initials: "AS", avatar_color: "#059669" },
+    reactions: { amen: 128, feu: 0, coeur: 94 },
+    user_reactions: {},
+    comments_count: 3,
+    comments: [
+      { id: "c3", content: "Gloire à Dieu sœur !", profiles: { full_name: "Ruth D.", avatar_initials: "RD", avatar_color: "#7C3AED" } },
+    ]
+  },
+  {
+    id: "3", created_at: new Date(Date.now() - 3600000).toISOString(),
+    content: "Priez pour la guérison de Mère Marie, hospitalisée depuis lundi. Que Dieu intervienne.",
+    type: "prayer", is_official: false, is_pinned: false,
+    media_url: null,
+    profiles: { full_name: "Diacre Abel", role: "diacre", avatar_initials: "DA", avatar_color: "#2258B8" },
+    reactions: { amen: 56, feu: 0, coeur: 12 },
+    user_reactions: {},
+    comments_count: 0,
+    comments: []
+  },
+  {
+    id: "4", created_at: new Date(Date.now() - 86400000).toISOString(),
+    content: "Verset du jour : \"Je peux tout par celui qui me fortifie.\" — Philippiens 4:13",
+    type: "verse", is_official: true, is_pinned: false,
+    media_url: null,
+    profiles: { full_name: "MIREC Officiel", role: "admin", avatar_initials: "M", avatar_color: "#1A4B9B" },
+    reactions: { amen: 203, feu: 87, coeur: 145 },
+    user_reactions: {},
+    comments_count: 7,
+    comments: []
+  },
+];
+let _listeners = [];
+const supabase = {
+  auth: { getUser: async () => ({ data: { user: { id: "me", email: "grace@mirec.bj" } } }) },
+  from: (table) => ({
+    select: () => ({ order: () => ({ data: _mockPosts, error: null }) }),
+    insert: async (row) => {
+      const newPost = {
+        ...row, id: String(Date.now()), created_at: new Date().toISOString(),
+        reactions: { amen: 0, feu: 0, coeur: 0 }, user_reactions: {},
+        comments_count: 0, comments: [],
+        profiles: { full_name: "Grace Dossou", role: "membre", avatar_initials: "GD", avatar_color: "#7C3AED" },
+      };
+      _mockPosts = [newPost, ..._mockPosts];
+      _listeners.forEach(fn => fn({ eventType: "INSERT", new: newPost }));
+      return { error: null };
+    },
+    update: async (row) => ({ eq: () => ({ error: null }) }),
+    delete: async () => ({ eq: () => ({ error: null }) }),
+  }),
+  channel: (name) => ({
+    on: (evt, cfg, fn) => { _listeners.push(fn); return { subscribe: () => {} }; },
+    subscribe: () => {},
+    unsubscribe: () => { _listeners = []; },
+  }),
+  removeChannel: () => {},
+};
+// ---- FIN MOCK -----------------------------------------------
+
+// ============================================================
+// PALETTE MIREC
+// ============================================================
+const C = {
+  blue900: "#0D2E6B", blue800: "#1A4B9B", blue700: "#2258B8",
+  blue500: "#4A7FD4", blue100: "#D6E8FB", blue50: "#EEF5FD",
+  white: "#FFFFFF", gray700: "#374151", gray500: "#6B7280",
+  gray300: "#D1D5DB", gray100: "#F3F4F6",
+  purple: "#7C3AED", amber: "#D97706", green: "#059669",
+  danger: "#DC2626",
+};
+
+// ============================================================
+// UTILITAIRES
+// ============================================================
+function timeAgo(iso) {
+  const diff = (Date.now() - new Date(iso)) / 1000;
+  if (diff < 60) return "à l'instant";
+  if (diff < 3600) return `il y a ${Math.floor(diff / 60)}min`;
+  if (diff < 86400) return `il y a ${Math.floor(diff / 3600)}h`;
+  return `il y a ${Math.floor(diff / 86400)}j`;
+}
+
+function typeConfig(type) {
+  switch (type) {
+    case "prayer":      return { label: "Prière", color: C.purple, bg: "#F5F3FF" };
+    case "testimony":   return { label: "Témoignage", color: C.green, bg: "#ECFDF5" };
+    case "announcement":return { label: "Annonce", color: C.blue800, bg: C.blue50 };
+    case "verse":       return { label: "Verset du jour", color: C.amber, bg: "#FFFBEB" };
+    default:            return { label: "Post", color: C.gray500, bg: C.gray100 };
+  }
+}
+
+// ============================================================
+// COMPOSANTS UI
+// ============================================================
+function Avatar({ initials, color, size = 40 }) {
+  return (
+    <div style={{
+      width: size, height: size, borderRadius: "50%",
+      background: color || C.blue800,
+      display: "flex", alignItems: "center", justifyContent: "center",
+      fontSize: size * 0.32, fontWeight: "700", color: C.white,
+      flexShrink: 0, letterSpacing: "0.5px",
+    }}>
+      {initials}
+    </div>
+  );
+}
+
+function Badge({ label, color, bg }) {
+  return (
+    <span style={{
+      display: "inline-block", padding: "2px 8px", borderRadius: "20px",
+      fontSize: "10px", fontWeight: "600", color, background: bg,
+      letterSpacing: "0.3px",
+    }}>
+      {label}
+    </span>
+  );
+}
+
+// ============================================================
+// REACTION BAR
+// ============================================================
+function ReactionBar({ post, onReact }) {
+  const reactions = [
+    { key: "amen",  emoji: "🙏", label: "Amen" },
+    { key: "feu",   emoji: "🔥", label: "" },
+    { key: "coeur", emoji: "❤️", label: "" },
+  ];
+  return (
+    <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginTop: "10px" }}>
+      {reactions.map(r => {
+        const active = post.user_reactions?.[r.key];
+        const count = post.reactions?.[r.key] || 0;
+        return (
+          <button key={r.key} onClick={() => onReact(post.id, r.key)}
+            style={{
+              display: "flex", alignItems: "center", gap: "5px",
+              padding: "5px 11px", borderRadius: "20px", border: "none",
+              background: active ? C.blue50 : C.gray100,
+              cursor: "pointer", fontSize: "13px",
+              color: active ? C.blue800 : C.gray700,
+              fontWeight: active ? "600" : "400",
+              transition: "all 0.15s",
+              outline: active ? `1.5px solid ${C.blue200}` : "none",
+            }}>
+            <span style={{ fontSize: "14px" }}>{r.emoji}</span>
+            {r.label && <span style={{ fontSize: "12px" }}>{r.label}</span>}
+            {count > 0 && <span style={{ fontSize: "12px", fontWeight: "600" }}>{count}</span>}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// ============================================================
+// COMMENT SECTION
+// ============================================================
+function CommentSection({ post, onAddComment }) {
+  const [text, setText] = useState("");
+  const [open, setOpen] = useState(false);
+
+  const submit = () => {
+    if (!text.trim()) return;
+    onAddComment(post.id, text.trim());
+    setText("");
+  };
+
+  return (
+    <div style={{ marginTop: "10px", borderTop: `1px solid ${C.gray100}`, paddingTop: "10px" }}>
+      <button onClick={() => setOpen(o => !o)}
+        style={{ background: "none", border: "none", color: C.gray500, fontSize: "12px", cursor: "pointer", padding: 0 }}>
+        {post.comments_count > 0 ? `${post.comments_count} commentaire(s)` : "Commenter"} {open ? "▲" : "▼"}
+      </button>
+
+      {open && (
+        <div style={{ marginTop: "8px" }}>
+          {(post.comments || []).map(c => (
+            <div key={c.id} style={{ display: "flex", gap: "8px", alignItems: "flex-start", marginBottom: "6px" }}>
+              <Avatar initials={c.profiles.avatar_initials} color={c.profiles.avatar_color} size={28} />
+              <div style={{
+                background: C.gray100, borderRadius: "10px", padding: "6px 10px",
+                fontSize: "12px", color: C.gray700, flex: 1,
+              }}>
+                <span style={{ fontWeight: "600", color: C.blue900, marginRight: "6px" }}>
+                  {c.profiles.full_name}
+                </span>
+                {c.content}
+              </div>
+            </div>
+          ))}
+
+          <div style={{ display: "flex", gap: "8px", marginTop: "8px" }}>
+            <input
+              value={text} onChange={e => setText(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && submit()}
+              placeholder="Écrire un commentaire..."
+              style={{
+                flex: 1, padding: "8px 12px", borderRadius: "20px",
+                border: `1px solid ${C.gray300}`, fontSize: "12px",
+                outline: "none", color: C.gray700,
+              }}
+            />
+            <button onClick={submit}
+              style={{
+                padding: "8px 14px", borderRadius: "20px", border: "none",
+                background: C.blue800, color: C.white, fontSize: "12px",
+                cursor: "pointer", fontWeight: "600",
+              }}>
+              Envoyer
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============================================================
+// POST CARD
+// ============================================================
+function PostCard({ post, onReact, onAddComment }) {
+  const tc = typeConfig(post.type);
+  const isPrayer = post.type === "prayer";
+  const isOfficial = post.is_official;
+
+  return (
+    <div style={{
+      background: C.white,
+      borderRadius: "16px",
+      border: `1px solid ${isPrayer ? "#DDD6FE" : C.gray100}`,
+      padding: "16px",
+      marginBottom: "12px",
+      borderLeft: isPrayer ? `4px solid ${C.purple}` : isOfficial ? `4px solid ${C.blue800}` : "1px solid transparent",
+      borderLeftWidth: (isPrayer || isOfficial) ? "4px" : "1px",
+    }}>
+      {/* Header */}
+      <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
+        <Avatar
+          initials={post.profiles.avatar_initials}
+          color={post.profiles.avatar_color}
+          size={40}
+        />
+        <div style={{ flex: 1 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
+            <span style={{ fontSize: "14px", fontWeight: "700", color: C.blue900 }}>
+              {post.profiles.full_name}
+            </span>
+            {post.profiles.role === "pasteur" && (
+              <Badge label="Pasteur" color={C.blue800} bg={C.blue50} />
+            )}
+            {post.profiles.role === "diacre" && (
+              <Badge label="Diacre" color={C.blue700} bg={C.blue100} />
+            )}
+            {post.is_pinned && (
+              <Badge label="📌 Épinglé" color={C.amber} bg="#FFFBEB" />
+            )}
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: "6px", marginTop: "2px" }}>
+            <span style={{ fontSize: "11px", color: C.gray500 }}>{timeAgo(post.created_at)}</span>
+            <span style={{ fontSize: "10px", color: tc.color, background: tc.bg, padding: "1px 7px", borderRadius: "10px", fontWeight: "600" }}>
+              {tc.label}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Contenu */}
+      <p style={{
+        fontSize: "14px", color: C.gray700, lineHeight: "1.6", margin: 0,
+        fontStyle: isPrayer ? "italic" : "normal",
+      }}>
+        {post.content}
+      </p>
+
+      {/* Médias */}
+      {post.media_url && (
+        <img src={post.media_url} alt="" style={{ width: "100%", borderRadius: "10px", marginTop: "10px", objectFit: "cover", maxHeight: "200px" }} />
+      )}
+
+      {/* Réactions */}
+      <ReactionBar post={post} onReact={onReact} />
+
+      {/* Commentaires */}
+      <CommentSection post={post} onAddComment={onAddComment} />
+    </div>
+  );
+}
+
+// ============================================================
+// MODAL NOUVEAU POST
+// ============================================================
+function NewPostModal({ onClose, onSubmit }) {
+  const [content, setContent] = useState("");
+  const [type, setType] = useState("post");
+  const [loading, setLoading] = useState(false);
+
+  const types = [
+    { key: "post",         label: "Post", emoji: "💬" },
+    { key: "testimony",    label: "Témoignage", emoji: "✨" },
+    { key: "prayer",       label: "Prière", emoji: "🙏" },
+    { key: "verse",        label: "Verset", emoji: "📖" },
+  ];
+
+  const submit = async () => {
+    if (!content.trim()) return;
+    setLoading(true);
+    await onSubmit({ content: content.trim(), type });
+    setLoading(false);
+    onClose();
+  };
+
+  return (
+    <div style={{
+      position: "fixed", inset: 0, background: "rgba(13,46,107,0.6)",
+      display: "flex", alignItems: "flex-end", justifyContent: "center",
+      zIndex: 100, padding: "0",
+    }}>
+      <div style={{
+        background: C.white, borderRadius: "24px 24px 0 0", padding: "24px",
+        width: "100%", maxWidth: "480px",
+      }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+          <span style={{ fontSize: "16px", fontWeight: "700", color: C.blue900 }}>Nouveau post</span>
+          <button onClick={onClose} style={{ background: "none", border: "none", fontSize: "20px", cursor: "pointer", color: C.gray500 }}>✕</button>
+        </div>
+
+        {/* Type selector */}
+        <div style={{ display: "flex", gap: "6px", marginBottom: "16px", flexWrap: "wrap" }}>
+          {types.map(t => (
+            <button key={t.key} onClick={() => setType(t.key)}
+              style={{
+                padding: "6px 12px", borderRadius: "20px", border: "none",
+                background: type === t.key ? C.blue800 : C.gray100,
+                color: type === t.key ? C.white : C.gray700,
+                fontSize: "12px", cursor: "pointer", fontWeight: type === t.key ? "600" : "400",
+              }}>
+              {t.emoji} {t.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Textarea */}
+        <textarea
+          value={content}
+          onChange={e => setContent(e.target.value)}
+          placeholder={
+            type === "prayer" ? "Partage ton sujet de prière avec la communauté..."
+            : type === "testimony" ? "Raconte ce que Dieu a fait dans ta vie..."
+            : type === "verse" ? "Quel verset veux-tu partager ?"
+            : "Qu'est-ce que tu veux partager avec la communauté ?"
+          }
+          rows={4}
+          style={{
+            width: "100%", padding: "12px 14px", borderRadius: "12px",
+            border: `1.5px solid ${C.gray300}`, fontSize: "14px",
+            color: C.gray700, resize: "none", outline: "none",
+            lineHeight: "1.6", boxSizing: "border-box",
+          }}
+        />
+
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "12px" }}>
+          <span style={{ fontSize: "11px", color: C.gray500 }}>{content.length}/500 caractères</span>
+          <button onClick={submit} disabled={loading || !content.trim()}
+            style={{
+              padding: "10px 24px", borderRadius: "20px", border: "none",
+              background: loading || !content.trim() ? C.gray300 : C.blue800,
+              color: C.white, fontSize: "13px", fontWeight: "700",
+              cursor: loading || !content.trim() ? "not-allowed" : "pointer",
+            }}>
+            {loading ? "Publication…" : "Publier"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// FILTRE TABS
+// ============================================================
+function FilterTabs({ active, onChange }) {
+  const tabs = [
+    { key: "all",       label: "Tout" },
+    { key: "prayer",    label: "🙏 Prières" },
+    { key: "testimony", label: "✨ Témoignages" },
+    { key: "announcement", label: "📣 Annonces" },
+  ];
+  return (
+    <div style={{ display: "flex", gap: "6px", overflowX: "auto", paddingBottom: "4px", marginBottom: "14px" }}>
+      {tabs.map(t => (
+        <button key={t.key} onClick={() => onChange(t.key)}
+          style={{
+            padding: "6px 14px", borderRadius: "20px", border: "none",
+            background: active === t.key ? C.blue800 : C.gray100,
+            color: active === t.key ? C.white : C.gray700,
+            fontSize: "12px", fontWeight: active === t.key ? "600" : "400",
+            cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0,
+          }}>
+          {t.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// ============================================================
+// STATS HEADER
+// ============================================================
+function FeedHeader({ posts }) {
+  const prayers = posts.filter(p => p.type === "prayer").length;
+  const testimonies = posts.filter(p => p.type === "testimony").length;
+  const totalAmens = posts.reduce((sum, p) => sum + (p.reactions?.amen || 0), 0);
+
+  return (
+    <div style={{
+      background: `linear-gradient(135deg, ${C.blue900}, ${C.blue800})`,
+      borderRadius: "16px", padding: "16px", marginBottom: "16px",
+      display: "flex", gap: "0",
+    }}>
+      {[
+        { label: "Posts", value: posts.length },
+        { label: "Prières", value: prayers },
+        { label: "Amen", value: totalAmens },
+        { label: "Tém.", value: testimonies },
+      ].map((s, i) => (
+        <div key={i} style={{
+          flex: 1, textAlign: "center",
+          borderRight: i < 3 ? `1px solid rgba(255,255,255,0.15)` : "none",
+          padding: "4px 0",
+        }}>
+          <div style={{ fontSize: "18px", fontWeight: "700", color: C.white }}>{s.value}</div>
+          <div style={{ fontSize: "10px", color: "rgba(255,255,255,0.6)", marginTop: "1px" }}>{s.label}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ============================================================
+// FEED PRINCIPAL
+// ============================================================
+export default function MirecFeed() {
+  const [posts, setPosts] = useState(_mockPosts);
+  const [filter, setFilter] = useState("all");
+  const [showModal, setShowModal] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const channelRef = useRef(null);
+
+  // ---- Charger les posts ----
+  const loadPosts = useCallback(async () => {
+    setLoading(true);
+    // En prod : const { data } = await supabase.from("posts").select("*, profiles(*), reactions(*), comments(*, profiles(*))").order("created_at", { ascending: false });
+    setPosts([..._mockPosts]);
+    setLoading(false);
+  }, []);
+
+  // ---- Supabase Realtime ----
+  useEffect(() => {
+    loadPosts();
+
+    // Abonnement Realtime sur la table posts
+    // En prod, remplacer par :
+    // channelRef.current = supabase
+    //   .channel("feed-realtime")
+    //   .on("postgres_changes", { event: "*", schema: "public", table: "posts" }, payload => {
+    //     if (payload.eventType === "INSERT") setPosts(prev => [payload.new, ...prev]);
+    //     if (payload.eventType === "UPDATE") setPosts(prev => prev.map(p => p.id === payload.new.id ? { ...p, ...payload.new } : p));
+    //     if (payload.eventType === "DELETE") setPosts(prev => prev.filter(p => p.id !== payload.old.id));
+    //   })
+    //   .subscribe();
+
+    channelRef.current = supabase.channel("feed-realtime")
+      .on("postgres_changes", { event: "*", schema: "public", table: "posts" }, payload => {
+        if (payload.eventType === "INSERT") setPosts(prev => [payload.new, ...prev]);
+      })
+      .subscribe();
+
+    return () => {
+      if (channelRef.current) supabase.removeChannel(channelRef.current);
+    };
+  }, [loadPosts]);
+
+  // ---- Réagir ----
+  const handleReact = useCallback(async (postId, reactionKey) => {
+    setPosts(prev => prev.map(p => {
+      if (p.id !== postId) return p;
+      const wasActive = p.user_reactions?.[reactionKey];
+      return {
+        ...p,
+        reactions: {
+          ...p.reactions,
+          [reactionKey]: (p.reactions[reactionKey] || 0) + (wasActive ? -1 : 1),
+        },
+        user_reactions: { ...p.user_reactions, [reactionKey]: !wasActive },
+      };
+    }));
+
+    // En prod :
+    // const { data: { user } } = await supabase.auth.getUser();
+    // const existing = await supabase.from("reactions").select("id").eq("post_id", postId).eq("profile_id", user.id).eq("type", reactionKey).single();
+    // if (existing.data) await supabase.from("reactions").delete().eq("id", existing.data.id);
+    // else await supabase.from("reactions").insert({ post_id: postId, profile_id: user.id, type: reactionKey });
+  }, []);
+
+  // ---- Commenter ----
+  const handleAddComment = useCallback(async (postId, content) => {
+    const newComment = {
+      id: String(Date.now()),
+      content,
+      profiles: { full_name: "Grace D.", avatar_initials: "GD", avatar_color: C.purple },
+    };
+    setPosts(prev => prev.map(p => {
+      if (p.id !== postId) return p;
+      return {
+        ...p,
+        comments_count: p.comments_count + 1,
+        comments: [...(p.comments || []), newComment],
+      };
+    }));
+
+    // En prod :
+    // const { data: { user } } = await supabase.auth.getUser();
+    // await supabase.from("comments").insert({ post_id: postId, author_id: user.id, content });
+  }, []);
+
+  // ---- Nouveau post ----
+  const handleNewPost = useCallback(async (postData) => {
+    // En prod :
+    // const { data: { user } } = await supabase.auth.getUser();
+    // await supabase.from("posts").insert({ ...postData, author_id: user.id });
+    // Le Realtime se charge d'ajouter au feed automatiquement
+
+    await supabase.from("posts").insert(postData); // mock
+  }, []);
+
+  // ---- Filtrer ----
+  const filtered = filter === "all" ? posts : posts.filter(p => p.type === filter);
+  const pinned = filtered.filter(p => p.is_pinned);
+  const others = filtered.filter(p => !p.is_pinned);
+  const sorted = [...pinned, ...others];
+
+  // ============================================================
+  // RENDER
+  // ============================================================
+  return (
+    <div style={{
+      maxWidth: "480px", margin: "0 auto", padding: "16px",
+      background: C.gray100, minHeight: "100vh",
+      fontFamily: "system-ui, -apple-system, sans-serif",
+    }}>
+
+      {/* Top bar */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "14px" }}>
+        <div>
+          <div style={{ fontSize: "20px", fontWeight: "700", color: C.blue900, letterSpacing: "1px", fontFamily: "'Georgia', serif" }}>
+            MIREC
+          </div>
+          <div style={{ fontSize: "11px", color: C.gray500 }}>Communauté · Feed</div>
+        </div>
+        <button onClick={() => setShowModal(true)}
+          style={{
+            padding: "9px 18px", borderRadius: "20px", border: "none",
+            background: C.blue800, color: C.white,
+            fontSize: "13px", fontWeight: "600", cursor: "pointer",
+            boxShadow: `0 4px 14px rgba(26,75,155,0.3)`,
+          }}>
+          + Publier
+        </button>
+      </div>
+
+      {/* Stats */}
+      <FeedHeader posts={posts} />
+
+      {/* Filtres */}
+      <FilterTabs active={filter} onChange={setFilter} />
+
+      {/* Liste posts */}
+      {loading ? (
+        <div style={{ textAlign: "center", padding: "40px", color: C.gray500, fontSize: "14px" }}>
+          Chargement du feed…
+        </div>
+      ) : sorted.length === 0 ? (
+        <div style={{ textAlign: "center", padding: "40px", color: C.gray500, fontSize: "14px" }}>
+          Aucun post dans cette catégorie.
+        </div>
+      ) : (
+        sorted.map(post => (
+          <PostCard
+            key={post.id}
+            post={post}
+            onReact={handleReact}
+            onAddComment={handleAddComment}
+          />
+        ))
+      )}
+
+      {/* Modal nouveau post */}
+      {showModal && (
+        <NewPostModal
+          onClose={() => setShowModal(false)}
+          onSubmit={handleNewPost}
+        />
+      )}
+    </div>
+  );
+}
+
+// ============================================================
+// SQL À COLLER DANS SUPABASE — table reactions + trigger points
+// ============================================================
+/*
+-- Trigger automatique : +2 pts quand on réagit
+CREATE OR REPLACE FUNCTION add_reaction_points()
+RETURNS TRIGGER AS $$
+BEGIN
+  INSERT INTO points_log (profile_id, action, points)
+  VALUES (NEW.profile_id, 'reaction', 2);
+  UPDATE profiles SET points_total = points_total + 2 WHERE id = NEW.profile_id;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER on_reaction_insert
+AFTER INSERT ON reactions
+FOR EACH ROW EXECUTE FUNCTION add_reaction_points();
+
+-- Trigger : +5 pts pour un commentaire
+CREATE OR REPLACE FUNCTION add_comment_points()
+RETURNS TRIGGER AS $$
+BEGIN
+  INSERT INTO points_log (profile_id, action, points)
+  VALUES (NEW.author_id, 'comment', 5);
+  UPDATE profiles SET points_total = points_total + 5 WHERE id = NEW.author_id;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER on_comment_insert
+AFTER INSERT ON comments
+FOR EACH ROW EXECUTE FUNCTION add_comment_points();
+
+-- Trigger : +30 pts pour un témoignage
+CREATE OR REPLACE FUNCTION add_post_points()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF NEW.type = 'testimony' THEN
+    INSERT INTO points_log (profile_id, action, points)
+    VALUES (NEW.author_id, 'testimony', 30);
+    UPDATE profiles SET points_total = points_total + 30 WHERE id = NEW.author_id;
+  ELSIF NEW.type = 'prayer' THEN
+    INSERT INTO points_log (profile_id, action, points)
+    VALUES (NEW.author_id, 'prayer_shared', 10);
+    UPDATE profiles SET points_total = points_total + 10 WHERE id = NEW.author_id;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER on_post_insert
+AFTER INSERT ON posts
+FOR EACH ROW EXECUTE FUNCTION add_post_points();
+
+-- RLS : chaque utilisateur voit tous les posts mais ne modifie que les siens
+ALTER TABLE posts ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Lecture publique" ON posts FOR SELECT USING (true);
+CREATE POLICY "Insertion propre" ON posts FOR INSERT WITH CHECK (auth.uid() = author_id);
+CREATE POLICY "Modification propre" ON posts FOR UPDATE USING (auth.uid() = author_id);
+
+ALTER TABLE reactions ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Lecture publique" ON reactions FOR SELECT USING (true);
+CREATE POLICY "Gestion propre" ON reactions FOR ALL USING (auth.uid() = profile_id);
+*/
