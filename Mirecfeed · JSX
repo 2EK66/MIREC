@@ -6,7 +6,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 //
 // Dépendances :
 //   npm install @supabase/supabase-js
-//   npx expo install expo-image-picker expo-av
+//   npx expo install expo-image-picker expo-av (optionnel)
 //
 // Remplacer le mock supabase par :
 //   import { supabase } from '../lib/supabase'
@@ -84,12 +84,28 @@ const supabase = {
     update: async (row) => ({ eq: () => ({ error: null }) }),
     delete: async () => ({ eq: () => ({ error: null }) }),
   }),
-  channel: (name) => ({
-    on: (evt, cfg, fn) => { _listeners.push(fn); return { subscribe: () => {} }; },
-    subscribe: () => {},
-    unsubscribe: () => { _listeners = []; },
-  }),
-  removeChannel: () => {},
+  channel: (name) => {
+    let listeners = [];
+    return {
+      on: (evt, cfg, fn) => {
+        listeners.push(fn);
+        return this; // Retourne l'objet channel pour chaînage
+      },
+      subscribe: () => {
+        // Les listeners sont déjà enregistrés via on()
+        // On les stocke dans la variable globale pour que insert() puisse les appeler
+        _listeners.push(...listeners);
+        listeners = [];
+      },
+      unsubscribe: () => {
+        // En vrai, il faudrait retirer les listeners spécifiques
+        _listeners = [];
+      },
+    };
+  },
+  removeChannel: (channel) => {
+    if (channel && channel.unsubscribe) channel.unsubscribe();
+  },
 };
 // ---- FIN MOCK -----------------------------------------------
 
@@ -498,24 +514,20 @@ export default function MirecFeed() {
     loadPosts();
 
     // Abonnement Realtime sur la table posts
-    // En prod, remplacer par :
-    // channelRef.current = supabase
-    //   .channel("feed-realtime")
-    //   .on("postgres_changes", { event: "*", schema: "public", table: "posts" }, payload => {
-    //     if (payload.eventType === "INSERT") setPosts(prev => [payload.new, ...prev]);
-    //     if (payload.eventType === "UPDATE") setPosts(prev => prev.map(p => p.id === payload.new.id ? { ...p, ...payload.new } : p));
-    //     if (payload.eventType === "DELETE") setPosts(prev => prev.filter(p => p.id !== payload.old.id));
-    //   })
-    //   .subscribe();
-
-    channelRef.current = supabase.channel("feed-realtime")
-      .on("postgres_changes", { event: "*", schema: "public", table: "posts" }, payload => {
-        if (payload.eventType === "INSERT") setPosts(prev => [payload.new, ...prev]);
-      })
-      .subscribe();
+    const channel = supabase.channel("feed-realtime");
+    channel.on("postgres_changes", { event: "*", schema: "public", table: "posts" }, payload => {
+      if (payload.eventType === "INSERT") {
+        setPosts(prev => [payload.new, ...prev]);
+      }
+      // Pour les updates et deletes, tu peux ajouter les cas ici
+    });
+    channel.subscribe();
+    channelRef.current = channel;
 
     return () => {
-      if (channelRef.current) supabase.removeChannel(channelRef.current);
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current);
+      }
     };
   }, [loadPosts]);
 
