@@ -1,32 +1,11 @@
 import { useState } from "react";
+import { supabase } from "../lib/supabase";   // ← Import réel
 
 // ============================================================
 // MIREC AUTH SCREEN
 // Couleurs : Bleu #1A4B9B (primaire), #FFFFFF (blanc), #E8F0FC (fond)
-// Utilise un mock Supabase – remplace par ton vrai client si besoin
+// Utilise le vrai client Supabase
 // ============================================================
-
-// Mock Supabase (remplace par ton vrai client si nécessaire)
-const supabase = {
-  auth: {
-    signInWithPassword: async ({ email, password }) => {
-      await new Promise(r => setTimeout(r, 1200));
-      if (email === "test@test.com" && password === "123456") {
-        return { data: { user: { email } }, error: null };
-      }
-      return { data: null, error: { message: "Identifiants invalides" } };
-    },
-    signUp: async ({ email, password, options }) => {
-      await new Promise(r => setTimeout(r, 1400));
-      if (email && password.length >= 6) return { data: { user: { email } }, error: null };
-      return { data: null, error: { message: "Erreur lors de l'inscription" } };
-    },
-    resetPasswordForEmail: async ({ email }) => {
-      await new Promise(r => setTimeout(r, 1000));
-      return { error: null };
-    }
-  }
-};
 
 // ============================================================
 // PALETTE MIREC
