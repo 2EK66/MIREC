@@ -1,0 +1,60 @@
+{
+  "expo": {
+    "name": "MIREC",
+    "slug": "mirec",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "scheme": "mirec",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#1A4B9B"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.mirec.app",
+      "buildNumber": "1"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#1A4B9B"
+      },
+      "package": "com.mirec.app",
+      "versionCode": 1,
+      "permissions": [
+        "RECORD_AUDIO",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE",
+        "CAMERA",
+        "ACCESS_FINE_LOCATION",
+        "RECEIVE_BOOT_COMPLETED",
+        "VIBRATE"
+      ]
+    },
+    "plugins": [
+      "expo-router",
+      ["expo-notifications", {
+        "icon": "./assets/notification-icon.png",
+        "color": "#1A4B9B"
+      }],
+      ["expo-av", {
+        "microphonePermission": "MIREC a besoin du micro pour les messages vocaux."
+      }],
+      ["expo-location", {
+        "locationAlwaysAndWhenInUsePermission": "MIREC utilise ta position pour les groupes de quartier."
+      }],
+      ["expo-image-picker", {
+        "photosPermission": "MIREC accède à ta galerie pour partager des photos.",
+        "cameraPermission": "MIREC accède à ta caméra."
+      }]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "REMPLACER_PAR_TON_PROJECT_ID_EXPO"
+      }
+    }
+  }
+}
