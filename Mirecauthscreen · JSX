@@ -6,13 +6,7 @@ import { useState } from "react";
 // Usage : remplacer supabase par ton client réel
 // ============================================================
 
-// --- Mock Supabase (à remplacer par : import { supabase } from '../lib/supabase') ---
-const supabase = {
-  auth: {
-    signInWithPassword: async ({ email, password }) => {
-      await new Promise(r => setTimeout(r, 1200));
-      if (email && password.length >= 6) return { data: { user: { email } }, error: null };
-      return { data: null, error: { message: "Email ou mot de passe incorrect" } };
+// import { supabase } from "../lib/supabase";;
     },
     signUp: async ({ email, password, options }) => {
       await new Promise(r => setTimeout(r, 1400));
