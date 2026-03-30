@@ -312,12 +312,30 @@ export default function MirecAuth() {
 
   // ---- Handlers ----
   const handleLogin = async () => {
-    if (!validate()) return;
-    setLoading(true); clearAlert();
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    setLoading(false);
-    if (error) setAlert({ type: "error", msg: error.message });
-    else setAlert({ type: "success", msg: "Connexion réussie ! Bienvenue dans MIREC." });
+  if (!validate()) return;
+
+  setLoading(true);
+  clearAlert();
+
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email,
+    password,
+  });
+
+  setLoading(false);
+
+  if (error) {
+    setAlert({ type: "error", msg: error.message });
+  } else {
+    setAlert({ type: "success", msg: "Connexion réussie !" });
+
+    console.log("Utilisateur connecté :", data.user);
+
+    // ✅ REDIRECTION
+    setTimeout(() => {
+      window.location.href = "/feed";
+    }, 800); // petit délai pour voir le message
+  }
   };
 
   const handleRegister = async () => {
