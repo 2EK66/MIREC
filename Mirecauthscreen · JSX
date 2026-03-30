@@ -3,10 +3,18 @@ import { useState } from "react";
 // ============================================================
 // MIREC AUTH SCREEN
 // Couleurs : Bleu #1A4B9B (primaire), #FFFFFF (blanc), #E8F0FC (fond)
-// Usage : remplacer supabase par ton client réel
+// Utilise un mock Supabase – remplace par ton vrai client si besoin
 // ============================================================
 
-// import { supabase } from "../lib/supabase";;
+// Mock Supabase (remplace par ton vrai client si nécessaire)
+const supabase = {
+  auth: {
+    signInWithPassword: async ({ email, password }) => {
+      await new Promise(r => setTimeout(r, 1200));
+      if (email === "test@test.com" && password === "123456") {
+        return { data: { user: { email } }, error: null };
+      }
+      return { data: null, error: { message: "Identifiants invalides" } };
     },
     signUp: async ({ email, password, options }) => {
       await new Promise(r => setTimeout(r, 1400));
@@ -312,58 +320,69 @@ export default function MirecAuth() {
 
   // ---- Handlers ----
   const handleLogin = async () => {
-  if (!validate()) return;
+    if (!validate()) return;
 
-  setLoading(true);
-  clearAlert();
+    setLoading(true);
+    clearAlert();
 
-  const { data, error } = await supabase.auth.signInWithPassword({
-    email,
-    password,
-  });
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
 
-  setLoading(false);
+    setLoading(false);
 
-  if (error) {
-    setAlert({ type: "error", msg: error.message });
-  } else {
-    setAlert({ type: "success", msg: "Connexion réussie !" });
-
-    console.log("Utilisateur connecté :", data.user);
-
-    // ✅ REDIRECTION
-    setTimeout(() => {
-      window.location.href = "/feed";
-    }, 800); // petit délai pour voir le message
-  }
+    if (error) {
+      setAlert({ type: "error", msg: error.message });
+    } else {
+      setAlert({ type: "success", msg: "Connexion réussie !" });
+      console.log("Utilisateur connecté :", data.user);
+      // Redirection
+      setTimeout(() => {
+        window.location.href = "/feed";
+      }, 800);
+    }
   };
 
   const handleRegister = async () => {
     if (!validate()) return;
-    setLoading(true); clearAlert();
+    setLoading(true);
+    clearAlert();
     const { error } = await supabase.auth.signUp({
-      email, password,
+      email,
+      password,
       options: { data: { full_name: fullName } }
     });
     setLoading(false);
-    if (error) setAlert({ type: "error", msg: error.message });
-    else setAlert({ type: "success", msg: "Compte créé ! Vérifie ton email pour confirmer." });
+    if (error) {
+      setAlert({ type: "error", msg: error.message });
+    } else {
+      setAlert({ type: "success", msg: "Compte créé ! Vérifie ton email pour confirmer." });
+    }
   };
 
   const handleForgot = async () => {
     if (!email.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)) {
-      setErrors({ email: "Entre un email valide" }); return;
+      setErrors({ email: "Entre un email valide" });
+      return;
     }
-    setLoading(true); clearAlert();
+    setLoading(true);
+    clearAlert();
     const { error } = await supabase.auth.resetPasswordForEmail({ email });
     setLoading(false);
-    if (error) setAlert({ type: "error", msg: error.message });
-    else setAlert({ type: "success", msg: "Lien de réinitialisation envoyé sur " + email });
+    if (error) {
+      setAlert({ type: "error", msg: error.message });
+    } else {
+      setAlert({ type: "success", msg: "Lien de réinitialisation envoyé sur " + email });
+    }
   };
 
   const switchMode = (m) => {
-    setMode(m); setErrors({}); setAlert(null);
-    setPassword(""); setConfirm("");
+    setMode(m);
+    setErrors({});
+    setAlert(null);
+    setPassword("");
+    setConfirm("");
   };
 
   // ============================================================
