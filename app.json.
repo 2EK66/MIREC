@@ -36,25 +36,32 @@
     },
     "plugins": [
       "expo-router",
-      ["expo-notifications", {
-        "icon": "./assets/notification-icon.png",
-        "color": "#1A4B9B"
-      }],
-      ["expo-av", {
-        "microphonePermission": "MIREC a besoin du micro pour les messages vocaux."
-      }],
-      ["expo-location", {
-        "locationAlwaysAndWhenInUsePermission": "MIREC utilise ta position pour les groupes de quartier."
-      }],
-      ["expo-image-picker", {
-        "photosPermission": "MIREC accède à ta galerie pour partager des photos.",
-        "cameraPermission": "MIREC accède à ta caméra."
-      }]
-    ],
-    "extra": {
-      "eas": {
-        "projectId": "REMPLACER_PAR_TON_PROJECT_ID_EXPO"
-      }
-    }
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#1A4B9B"
+        }
+      ],
+      [
+        "expo-av",
+        {
+          "microphonePermission": "MIREC a besoin du micro pour les messages vocaux."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "MIREC utilise ta position pour les groupes de quartier."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "MIREC accède à ta galerie pour partager des photos.",
+          "cameraPermission": "MIREC accède à ta caméra."
+        }
+      ]
+    ]
   }
 }
