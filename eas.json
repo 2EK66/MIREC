@@ -11,7 +11,7 @@
       "ios": { "simulator": true },
       "env": {
         "EXPO_PUBLIC_SUPABASE_URL": "https://jafhpkbtxcmzufznnbxc.supabase.co",
-        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "REMPLACER_PAR_TA_CLE_ANON"
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_x6fpUPoiRmETpw3kZP1v7A_EvCpuliH"
       }
     },
     "preview": {
@@ -19,7 +19,7 @@
       "android": { "buildType": "apk" },
       "env": {
         "EXPO_PUBLIC_SUPABASE_URL": "https://jafhpkbtxcmzufznnbxc.supabase.co",
-        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "REMPLACER_PAR_TA_CLE_ANON"
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_x6fpUPoiRmETpw3kZP1v7A_EvCpuliH"
       }
     },
     "production": {
@@ -27,7 +27,7 @@
       "android": { "buildType": "app-bundle" },
       "env": {
         "EXPO_PUBLIC_SUPABASE_URL": "https://jafhpkbtxcmzufznnbxc.supabase.co",
-        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "REMPLACER_PAR_TA_CLE_ANON"
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_x6fpUPoiRmETpw3kZP1v7A_EvCpuliH"
       }
     }
   },
